@@ -1,0 +1,65 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / ripgrep ${{ matrix.ripgrep }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Search must work with ripgrep installed and fall back cleanly without it.
+        ripgrep: [installed, absent]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: npm-shrinkwrap.json
+      - run: npm ci --no-audit --no-fund
+      - name: Install ripgrep
+        if: matrix.ripgrep == 'installed'
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y ripgrep ;;
+            macOS) brew install ripgrep ;;
+            Windows) choco install ripgrep --no-progress -y ;;
+          esac
+          rg --version
+      - name: Hide any preinstalled ripgrep
+        if: matrix.ripgrep == 'absent'
+        run: |
+          # Drop every PATH entry that provides rg so the tests exercise the built-in fallback.
+          kept=""
+          IFS=':' read -ra entries <<< "$PATH"
+          for dir in "${entries[@]}"; do
+            if [ -e "$dir/rg" ] || [ -e "$dir/rg.exe" ]; then
+              case "$dir" in /bin|/usr/bin|/usr/local/bin) echo "rg is preinstalled in $dir; hiding it would hide core tools"; exit 1 ;; esac
+              echo "hiding $dir"; continue
+            fi
+            kept="${kept:+$kept:}$dir"
+          done
+          # GITHUB_ENV is read by the runner, which expects a native Windows PATH list there.
+          if [ "$RUNNER_OS" = Windows ]; then kept="$(cygpath -wp "$kept")"; fi
+          echo "PATH=$kept" >> "$GITHUB_ENV"
+      - name: Confirm ripgrep state
+        run: |
+          if command -v rg >/dev/null; then echo "rg: $(command -v rg)"; else echo "rg: absent"; fi
+          if [ "${{ matrix.ripgrep }}" = absent ] && command -v rg >/dev/null; then echo "rg still on PATH"; exit 1; fi
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          EXPECT_SEARCH_ENGINE: ${{ matrix.ripgrep == 'installed' && 'rg' || 'fallback' }}

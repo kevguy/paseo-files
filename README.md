@@ -29,7 +29,7 @@ Screenshots use an entirely fictional Atlas workspace. These are the real compon
 With Paseo 0.16.2 or later, install the exact published release on the host:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-files@0.1.2
+paseo plugin install npm:@kevlai22/paseo-files@0.1.3
 paseo plugin ls paseo-files
 ```
 
@@ -47,6 +47,22 @@ paseo plugin install /absolute/path/to/paseo-files
 ```
 
 Or unpack a release archive into a permanent directory and install that directory. The manifest installs locked runtime and compiler type dependencies with lifecycle scripts disabled. Install separately on each host where you want to use it. No daemon restart is required to add this plugin to an already enabled plugin runtime.
+
+## Faster search with ripgrep (optional)
+
+Search works without any extra software: if [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) is not on the daemon's `PATH`, or cannot be started, Files & Notes uses its built-in search instead. That fallback is bounded, so on large workspaces it may stop early and label the results as limited. Installing ripgrep on the daemon host makes search faster and lets it cover more files. The plugin does not bundle ripgrep, and it ignores your personal ripgrep config file.
+
+| Host | Install |
+| --- | --- |
+| macOS | `brew install ripgrep` |
+| Debian / Ubuntu | `sudo apt install ripgrep` |
+| Fedora | `sudo dnf install ripgrep` |
+| Arch | `sudo pacman -S ripgrep` |
+| Windows | `winget install BurntSushi.ripgrep.MSVC` (or `choco install ripgrep`, `scoop install ripgrep`) |
+
+Check with `rg --version` in a new terminal. The daemon only sees programs on the `PATH` it was started with, so restart Paseo after installing. A shell alias or function named `rg` (for example the one Claude Code adds to your shell) is not visible to the daemon.
+
+## Using it
 
 Open **Files & Notes** in the sidebar and select a workspace. You can also open its workspace/Explorer panel or use **Find files and notes** in the Command Center. Existing text file tabs offer **Notes & Code**; PDF file tabs offer **Viewer**.
 
@@ -96,7 +112,7 @@ npm run typecheck
 npm test
 ```
 
-Tests create synthetic fixtures under `.validation/`. To exercise the actual editing/search components with synthetic files:
+CI runs the type check and tests on macOS, Linux and Windows, each with ripgrep installed and with ripgrep absent. Tests create synthetic fixtures under `.validation/`. To exercise the actual editing/search components with synthetic files:
 
 ```sh
 npx playwright install chromium

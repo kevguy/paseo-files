@@ -5,6 +5,7 @@ import test from "node:test";
 import { browse, locate, readText, saveText, search } from "../server/files";
 
 const fixtures = join(process.cwd(), ".validation", "files-backend");
+const windows = process.platform === "win32";
 let sequence = 0;
 async function workspace() {
   const path = join(fixtures, `case-${process.pid}-${sequence++}`);
@@ -58,22 +59,23 @@ test("explicit save preserves BOM and CRLF when text retains them", async () => 
     const saved = await saveText(root, "notes.md", `${opened.text}gamma\r\n`, opened.revision);
     assert.deepEqual(await readFile(join(root, "notes.md")), Buffer.from("\uFEFFalpha\r\nbeta\r\ngamma\r\n", "utf8"));
     assert.notEqual(saved.revision, opened.revision);
-    assert.equal((await stat(join(root, "notes.md"))).mode & 0o777, 0o640);
+    if (!windows) assert.equal((await stat(join(root, "notes.md"))).mode & 0o777, 0o640);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("search finds matching files and directories and treats content queries literally", async () => {
   const root = await workspace();
+  const special = windows ? "[+]" : "[*]";
   try {
-    await mkdir(join(root, "folder [*]"), { recursive: true });
-    await writeFile(join(root, "folder [*]", "literal [*].md"), "before\nneedle [*] value\nafter\n");
-    await writeFile(join(root, "folder [*]", "other.md"), "needle xx value\n");
-    const names = await search(root, "", "[*]", "names", true);
-    assert.ok(names.entries.some((entry) => entry.kind === "directory" && entry.path === "folder [*]"));
-    assert.ok(names.entries.some((entry) => entry.kind === "file" && entry.path.endsWith("literal [*].md")));
-    const contents = await search(root, "", "needle [*]", "content", true);
-    assert.deepEqual(contents.entries.map((entry) => ({ path: entry.path, line: "line" in entry ? entry.line : undefined })), [{ path: "folder [*]/literal [*].md", line: 2 }]);
-    assert.match(("preview" in (contents.entries[0] ?? {}) ? contents.entries[0]?.preview : "") ?? "", /needle \[\*\]/);
+    await mkdir(join(root, `folder ${special}`), { recursive: true });
+    await writeFile(join(root, `folder ${special}`, `literal ${special}.md`), `before\nneedle ${special} value\nafter\n`);
+    await writeFile(join(root, `folder ${special}`, "other.md"), "needle xx value\n");
+    const names = await search(root, "", special, "names", true);
+    assert.ok(names.entries.some((entry) => entry.kind === "directory" && entry.path === `folder ${special}`));
+    assert.ok(names.entries.some((entry) => entry.kind === "file" && entry.path.endsWith(`literal ${special}.md`)));
+    const contents = await search(root, "", `needle ${special}`, "content", true);
+    assert.deepEqual(contents.entries.map((entry) => ({ path: entry.path, line: "line" in entry ? entry.line : undefined })), [{ path: `folder ${special}/literal ${special}.md`, line: 2 }]);
+    assert.match(("preview" in (contents.entries[0] ?? {}) ? contents.entries[0]?.preview : "") ?? "", new RegExp(`needle ${special.replace(/[[\]*+]/g, "\\$&")}`));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -81,10 +83,11 @@ test("name search handles newline and Unicode filenames plus path queries", asyn
   const root = await workspace();
   try {
     await mkdir(join(root, "section"), { recursive: true });
-    await writeFile(join(root, "section", "line\n☃.md"), "content");
+    const odd = windows ? "line ☃.md" : "line\n☃.md"; // newline is not a legal Windows filename character
+    await writeFile(join(root, "section", odd), "content");
     await writeFile(join(root, "section", "target.md"), "content");
-    const newlineName = await search(root, "", "line\n☃", "names", true);
-    assert.ok(newlineName.entries.some((entry) => entry.path === "section/line\n☃.md"));
+    const newlineName = await search(root, "", odd.slice(0, -3), "names", true);
+    assert.ok(newlineName.entries.some((entry) => entry.path === `section/${odd}`));
     const byPath = await search(root, "", "section/target", "names", true);
     assert.ok(byPath.entries.some((entry) => entry.path === "section/target.md" && entry.kind === "file"));
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -114,7 +117,8 @@ test("concurrent saves with one revision allow exactly one writer", async () => 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test("rg errors are surfaced instead of reported as empty results", async () => {
+// Windows cannot spawn a shell-script rg without a shell, so the fake failing rg is POSIX-only.
+test("rg errors are surfaced instead of reported as empty results", { skip: windows && "needs a POSIX shell-script rg" }, async () => {
   const root = await workspace();
   const fakeBin = join(fixtures, `fake-rg-${process.pid}-${sequence}`);
   const priorPath = process.env.PATH;
@@ -130,6 +134,47 @@ test("rg errors are surfaced instead of reported as empty results", async () => 
     await rm(root, { recursive: true, force: true });
     await rm(fakeBin, { recursive: true, force: true });
   }
+});
+
+// A non-executable rg on PATH (and, before 0.1.3, any spawn error other than ENOENT) used to surface
+// as "spawn rg EACCES" instead of falling back. On Windows a file named plain "rg" is never a candidate.
+test("an rg on PATH that cannot run falls back to the bounded walk", async () => {
+  const root = await workspace();
+  const fakeBin = join(fixtures, `noexec-rg-${process.pid}-${sequence}`);
+  const priorPath = process.env.PATH;
+  try {
+    await mkdir(join(root, "notes"), { recursive: true });
+    await writeFile(join(root, "notes", "welcome.md"), "hello welcome text\n");
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(join(fakeBin, "rg"), "not a program\n");
+    await chmod(join(fakeBin, "rg"), 0o644);
+    process.env.PATH = fakeBin;
+    const names = await search(root, "", "welcome", "names", false);
+    assert.equal(names.engine, "bounded-walk-fallback");
+    assert.deepEqual(names.entries.map((entry) => entry.path), ["notes/welcome.md"]);
+    const contents = await search(root, "", "welcome text", "content", false);
+    assert.equal(contents.engine, "bounded-walk-fallback");
+    assert.deepEqual(contents.entries.map((entry) => entry.path), ["notes/welcome.md"]);
+  } finally {
+    process.env.PATH = priorPath;
+    await rm(root, { recursive: true, force: true });
+    await rm(fakeBin, { recursive: true, force: true });
+  }
+});
+
+// CI sets EXPECT_SEARCH_ENGINE so each matrix leg proves which engine actually ran.
+test("search uses the engine this environment is expected to provide", { skip: !process.env.EXPECT_SEARCH_ENGINE && "EXPECT_SEARCH_ENGINE not set" }, async () => {
+  const root = await workspace();
+  try {
+    await writeFile(join(root, "engine.md"), "engine probe\n");
+    const names = await search(root, "", "engine", "names", false);
+    const contents = await search(root, "", "engine probe", "content", false);
+    const expected = process.env.EXPECT_SEARCH_ENGINE === "rg"
+      ? ["rg-files+bounded-directory-walk", "rg"]
+      : ["bounded-walk-fallback", "bounded-walk-fallback"];
+    assert.deepEqual([names.engine, contents.engine], expected);
+    assert.deepEqual(contents.entries.map((entry) => entry.path), ["engine.md"]);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("search results report limits for capped result sets", async () => {

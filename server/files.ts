@@ -3,8 +3,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { constants as fsConstants } from "node:fs";
-import { lstat, open, opendir, realpath, rename, unlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { access, lstat, open, opendir, realpath, rename, stat, unlink } from "node:fs/promises";
+import { basename, delimiter, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 
 const MAX_EDIT_BYTES = 512 * 1024;
 const MAX_BROWSE = 500;
@@ -206,12 +206,49 @@ async function walkNames(root: string, scope: string, query: string, caseSensiti
   return { entries, limited };
 }
 
-function runRg(root: string, scope: string, query: string, caseSensitive: boolean): Promise<{ stdout: string; limited: boolean; unavailable: boolean; error?: string }> {
+const WINDOWS = process.platform === "win32";
+
+// Find rg on PATH ourselves and run it by absolute path. Windows would otherwise look in the
+// spawn cwd (the user's workspace) first, so a workspace containing rg.exe could be executed.
+// Relative and empty PATH entries are skipped for the same reason. Unreadable directories are
+// skipped too; null means "use the built-in search".
+async function findRg(): Promise<string | null> {
+  const names = WINDOWS ? ["rg.exe"] : ["rg"];
+  for (const raw of (process.env.PATH ?? "").split(delimiter)) {
+    const dir = WINDOWS ? raw.replace(/^"(.*)"$/, "$1") : raw; // Windows PATH entries may be quoted
+    if (!dir || !isAbsolute(dir)) continue;
+    for (const name of names) {
+      const candidate = join(dir, name);
+      try {
+        if (!(await stat(candidate)).isFile()) continue;
+        if (!WINDOWS) await access(candidate, fsConstants.X_OK);
+        return candidate;
+      } catch { /* not here, not a file, or not executable */ }
+    }
+  }
+  return null;
+}
+
+// A minimal environment: rg needs nothing from the daemon's environment, but Windows programs
+// need a few system variables to start. User ripgrep config is ignored with --no-config.
+const WINDOWS_ENV_KEYS = ["SystemRoot", "SystemDrive", "windir", "TEMP", "TMP", "PATHEXT", "ComSpec"];
+function rgEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "", RUST_BACKTRACE: "0" };
+  if (WINDOWS) for (const key of WINDOWS_ENV_KEYS) if (process.env[key] !== undefined) env[key] = process.env[key];
+  return env;
+}
+
+type RgResult = { stdout: string; limited: boolean; unavailable: boolean; error?: string };
+const RG_UNAVAILABLE: RgResult = { stdout: "", limited: false, unavailable: true };
+
+async function runRg(root: string, scope: string, query: string, caseSensitive: boolean): Promise<RgResult> {
+  const rg = await findRg();
+  if (!rg) return RG_UNAVAILABLE;
   return new Promise((resolvePromise) => {
     let child;
     try {
-      const args = ["--json", "--line-number", "--no-heading", "--color", "never", "--fixed-strings", "--hidden", "--no-ignore", "--no-follow", "--max-filesize", `${MAX_EDIT_BYTES}`, "--max-count", "1", ...(caseSensitive ? [] : ["--ignore-case"]), ...EXCLUDED_GLOBS.flatMap((glob) => ["--glob", glob]), "--", query, scope || "."];
-      child = spawn("rg", args, { cwd: root, stdio: ["ignore", "pipe", "ignore"], env: { PATH: process.env.PATH ?? "/usr/bin:/bin", RUST_BACKTRACE: "0", RIPGREP_CONFIG_PATH: "/dev/null" } });
+      const args = ["--no-config", "--json", "--line-number", "--no-heading", "--color", "never", "--fixed-strings", "--hidden", "--no-ignore", "--no-follow", "--max-filesize", `${MAX_EDIT_BYTES}`, "--max-count", "1", ...(caseSensitive ? [] : ["--ignore-case"]), ...EXCLUDED_GLOBS.flatMap((glob) => ["--glob", glob]), "--", query, scope || "."];
+      child = spawn(rg, args, { cwd: root, stdio: ["ignore", "pipe", "ignore"], env: rgEnv(), windowsHide: true });
     } catch (error) { resolvePromise({ stdout: "", limited: false, unavailable: false, error: String(error) }); return; }
     let stdout = "";
     let limited = false;
@@ -225,7 +262,8 @@ function runRg(root: string, scope: string, query: string, caseSensitive: boolea
       if (Buffer.byteLength(stdout, "utf8") + Buffer.byteLength(decoded, "utf8") > 2 * 1024 * 1024) { limited = true; child.kill("SIGTERM"); return; }
       stdout += decoded;
     });
-    child.on("error", (error: NodeJS.ErrnoException) => finish(error.code === "ENOENT", error.code === "ENOENT" ? undefined : `ripgrep could not start: ${error.message}`));
+    // No pid means rg never started (missing, not executable, unreadable PATH entry): use the walk fallback.
+    child.on("error", (error: NodeJS.ErrnoException) => child.pid === undefined ? finish(true) : finish(false, `ripgrep failed: ${error.message}`));
     child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       if (!limited && (code !== 0 && code !== 1)) finish(false, `ripgrep failed${code === null ? ` (${signal ?? "signal"})` : ` (exit ${code})`}`);
       else finish(false);
@@ -233,12 +271,14 @@ function runRg(root: string, scope: string, query: string, caseSensitive: boolea
   });
 }
 
-function runRgFiles(root: string, scope: string): Promise<{ stdout: string; limited: boolean; unavailable: boolean; error?: string }> {
+async function runRgFiles(root: string, scope: string): Promise<RgResult> {
+  const rg = await findRg();
+  if (!rg) return RG_UNAVAILABLE;
   return new Promise((resolvePromise) => {
     let child;
     try {
-      const args = ["--files", "--null", "--hidden", "--no-ignore", "--no-follow", ...EXCLUDED_GLOBS.flatMap((glob) => ["--glob", glob]), "--", scope || "."];
-      child = spawn("rg", args, { cwd: root, stdio: ["ignore", "pipe", "ignore"], env: { PATH: process.env.PATH ?? "/usr/bin:/bin", RIPGREP_CONFIG_PATH: "/dev/null" } });
+      const args = ["--no-config", "--files", "--null", "--hidden", "--no-ignore", "--no-follow", ...EXCLUDED_GLOBS.flatMap((glob) => ["--glob", glob]), "--", scope || "."];
+      child = spawn(rg, args, { cwd: root, stdio: ["ignore", "pipe", "ignore"], env: rgEnv(), windowsHide: true });
     } catch (error) { resolvePromise({ stdout: "", limited: false, unavailable: false, error: String(error) }); return; }
     let stdout = "";
     let limited = false;
@@ -252,7 +292,7 @@ function runRgFiles(root: string, scope: string): Promise<{ stdout: string; limi
       if (Buffer.byteLength(stdout, "utf8") + Buffer.byteLength(decoded, "utf8") > MAX_NAME_OUTPUT_BYTES) { limited = true; child.kill("SIGTERM"); return; }
       stdout += decoded;
     });
-    child.on("error", (error: NodeJS.ErrnoException) => finish(error.code === "ENOENT", error.code === "ENOENT" ? undefined : `rg --files could not start: ${error.message}`));
+    child.on("error", (error: NodeJS.ErrnoException) => child.pid === undefined ? finish(true) : finish(false, `rg --files failed: ${error.message}`));
     child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       if (!limited && (code !== 0 && code !== 1)) finish(false, `rg --files failed${code === null ? ` (${signal ?? "signal"})` : ` (exit ${code})`}`);
       else finish(false);
