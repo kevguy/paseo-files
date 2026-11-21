@@ -16,14 +16,14 @@ function initial(tab:PluginTab,workspaceId:string,key:string){return memory.get(
 export function FilesPanel(props:PluginWorkspacePanelProps){return <Browser key={`${props.host.id}:${props.workspaceId}`} {...props}/>;}
 function Browser(props:PluginWorkspacePanelProps & {initialPath?:string}){
  const {theme,layout,workspaceId,tab,host}=props,c=theme.colors;const cacheKey=`${host.id}:${workspaceId}:${props.initialPath??'browser'}`;
- const [state,setState]=useState<State>(()=>initial(tab,workspaceId,cacheKey));const latest=useRef(state);latest.current=state;
+ const [state,setState]=useState<State>(()=>initial(tab,workspaceId,cacheKey));const latest=useRef(state);latest.current=state;const tabRef=useRef(tab);tabRef.current=tab;
  const [rows,setRows]=useState<Row[]>([]),[limited,setLimited]=useState(false),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [pdf,setPdf]=useState<string|null>(null),[line,setLine]=useState<number|undefined>(),[refresh,setRefresh]=useState(0),[pathInput,setPathInput]=useState(state.folder),[confirmBack,setConfirmBack]=useState(false),[editorEpoch,setEditorEpoch]=useState(0);
  const browse=useRpc(browseRpc),search=useRpc(searchRpc),read=useRpc(readRpc),save=useRpc(saveRpc);const request=useRef(0);
  const dirty=!!state.draft&&state.draft.text!==state.draft.baseText;
  const patch=(part:Partial<State>)=>setState(s=>({...s,...part}));
- useEffect(()=>{memory.set(cacheKey,state);tab.setModified(dirty);const t=setTimeout(()=>tab.setState(JSON.parse(JSON.stringify(state))),250);return()=>clearTimeout(t);},[state,dirty,tab,cacheKey]);
- useEffect(()=>()=>{const s=latest.current;memory.set(cacheKey,s);tab.setState(JSON.parse(JSON.stringify(s)));},[tab,cacheKey]);
+ useEffect(()=>{memory.set(cacheKey,state);tabRef.current.setModified(dirty);const t=setTimeout(()=>tabRef.current.setState(JSON.parse(JSON.stringify(state))),250);return()=>clearTimeout(t);},[state,dirty,cacheKey]);
+ useEffect(()=>()=>{const s=latest.current;memory.set(cacheKey,s);tabRef.current.setState(JSON.parse(JSON.stringify(s)));},[cacheKey]);
  useEffect(()=>{let alive=true;setLoading(true);const timer=setTimeout(async()=>{try{const result=state.query.trim()?await search({workspaceId,scope:state.folder,query:state.query,mode:state.mode,caseSensitive:false}):await browse({workspaceId,path:state.folder});if(alive){setRows(result.entries);setLimited(result.limited);setError('');}}catch(e){if(alive){setRows([]);setError(String(e));}}finally{if(alive)setLoading(false);}},state.query?250:0);return()=>{alive=false;clearTimeout(timer);};},[workspaceId,state.folder,state.query,state.mode,refresh,browse,search]);
  async function open(path:string,at?:number){const active=latest.current.draft;if(active&&active.text!==active.baseText){setNotice('Save your changes or return to Files before opening another file.');return;}const token=++request.current;setBusy(true);setError('');setNotice('');const ext=path.split('.').pop()?.toLowerCase()??'';
    if(kindForPath(path)&&!TEXT_EXTENSIONS.includes(ext)){setPdf(path);setBusy(false);return;}

@@ -29,7 +29,7 @@ Screenshots use an entirely fictional Atlas workspace. These are the real compon
 With Paseo 0.16.2 or later, install the exact published release on the host:
 
 ```sh
-paseo plugin install npm:@kevlai22/paseo-files@0.1.1
+paseo plugin install npm:@kevlai22/paseo-files@0.1.2
 paseo plugin ls paseo-files
 ```
 
