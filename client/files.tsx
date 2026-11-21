@@ -22,7 +22,8 @@ function Browser(props:PluginWorkspacePanelProps & {initialPath?:string}){
  const browse=useRpc(browseRpc),search=useRpc(searchRpc),read=useRpc(readRpc),save=useRpc(saveRpc);const request=useRef(0);
  const dirty=!!state.draft&&state.draft.text!==state.draft.baseText;
  const patch=(part:Partial<State>)=>setState(s=>({...s,...part}));
- useEffect(()=>{memory.set(cacheKey,state);tabRef.current.setModified(dirty);const t=setTimeout(()=>tabRef.current.setState(JSON.parse(JSON.stringify(state))),250);return()=>clearTimeout(t);},[state,dirty,cacheKey]);
+ useEffect(()=>{tab.setModified(dirty);},[dirty,tab]);
+ useEffect(()=>{memory.set(cacheKey,state);const t=setTimeout(()=>tabRef.current.setState(JSON.parse(JSON.stringify(state))),250);return()=>clearTimeout(t);},[state,cacheKey]);
  useEffect(()=>()=>{const s=latest.current;memory.set(cacheKey,s);tabRef.current.setState(JSON.parse(JSON.stringify(s)));},[cacheKey]);
  useEffect(()=>{let alive=true;setLoading(true);const timer=setTimeout(async()=>{try{const result=state.query.trim()?await search({workspaceId,scope:state.folder,query:state.query,mode:state.mode,caseSensitive:false}):await browse({workspaceId,path:state.folder});if(alive){setRows(result.entries);setLimited(result.limited);setError('');}}catch(e){if(alive){setRows([]);setError(String(e));}}finally{if(alive)setLoading(false);}},state.query?250:0);return()=>{alive=false;clearTimeout(timer);};},[workspaceId,state.folder,state.query,state.mode,refresh,browse,search]);
  async function open(path:string,at?:number){const active=latest.current.draft;if(active&&active.text!==active.baseText){setNotice('Save your changes or return to Files before opening another file.');return;}const token=++request.current;setBusy(true);setError('');setNotice('');const ext=path.split('.').pop()?.toLowerCase()??'';

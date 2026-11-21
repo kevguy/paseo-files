@@ -13,13 +13,14 @@ const params = new URLSearchParams(window.location.search);
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Harness() {
   const [saved, setSaved] = useState<unknown>();
+  const [modified, setModified] = useState(false);
   // The host can recreate its tab facade after persisting state. Keep this identity
   // churn in the fixture to catch effects that treat the facade as stable.
-  const tab = { state: saved, setState: setSaved, setModified(_value: boolean) {} } as any;
+  const tab = { state: saved, setState: setSaved, setModified } as any;
   const props = {
     host: { id: 'synthetic-host' }, workspaceId: 'synthetic-workspace', tab,
     theme, layout: { compact: params.has('compact') ? params.get('compact') === '1' : window.innerWidth < 600, platform: params.get('platform') ?? 'android' },
   } as any;
-  return <FilesPanel {...props} />;
+  return <><div data-testid="tab-modified">{String(modified)}</div><FilesPanel {...props} /></>;
 }
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={queryClient}><Harness /></QueryClientProvider>);

@@ -182,6 +182,8 @@ try {
   await page.getByRole('button', { name: 'Heading', exact: true }).click();
   const editor = page.getByLabel('File contents');
   await editor.fill((await editor.inputValue()) + '\nBrowser edit marker');
+  await page.getByTestId('tab-modified').getByText('true').waitFor();
+  check('replacement tab facade retains the dirty indicator', await page.getByTestId('tab-modified').textContent() === 'true');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForFixtureText('Browser edit marker');
   check('markdown toolbar edit and save writes fixture', (await readFile(markdownPath, 'utf8')).includes('Browser edit marker'));
