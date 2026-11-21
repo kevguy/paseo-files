@@ -1,6 +1,6 @@
 # Files & Notes
 
-Read Markdown, edit notes and source files, search a workspace, and open PDFs inside Paseo. The interface uses React Native so the editing tools work in the native mobile app as well as on desktop.
+Read Markdown, edit notes and source files, search a workspace, and open PDFs inside Paseo. Native mobile clients use their platform text input for editing. The CodeMirror editor and full Vim mode run on the web editor, including desktop and tablet browsers; the native mobile app does not provide full Vim mode.
 
 Start in **Files & Notes** in the sidebar and choose a workspace. Search filenames/folders or file contents. Open a note to switch between Read and Edit; Save writes changes explicitly and rejects a stale file revision. Open a PDF to use the integrated native-compatible document viewer.
 

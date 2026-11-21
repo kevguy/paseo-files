@@ -1,11 +1,11 @@
 {
-  "name": "paseo-files",
+  "name": "@kevlai22/paseo-files",
   "version": "0.1.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
-      "name": "paseo-files",
+      "name": "@kevlai22/paseo-files",
       "version": "0.1.1",
       "license": "MIT",
       "dependencies": {

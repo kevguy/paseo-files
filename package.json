@@ -1,5 +1,5 @@
 {
-  "name": "paseo-files",
+  "name": "@kevlai22/paseo-files",
   "private": false,
   "version": "0.1.1",
   "files": [
@@ -67,5 +67,13 @@
     "prismjs": "^1.30.0",
     "ssf": "^0.11.2",
     "utif2": "^4.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kevguy/paseo-files.git"
+  },
+  "homepage": "https://github.com/kevguy/paseo-files#readme",
+  "bugs": {
+    "url": "https://github.com/kevguy/paseo-files/issues"
   }
 }

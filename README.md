@@ -24,6 +24,17 @@ Screenshots use an entirely fictional Atlas workspace. These are the real compon
 
 ![Split Markdown editing with Vim enabled](docs/screenshots/desktop-split-vim-normal.png)
 
+## Install from npm
+
+With Paseo 0.16.2 or later, install the exact published release on the host:
+
+```sh
+paseo plugin install npm:@kevlai22/paseo-files@0.1.1
+paseo plugin ls paseo-files
+```
+
+Keep the host online while Paseo downloads and prepares the package. Installing a plugin does not restart the daemon. Repeat on each host where you want to use it.
+
 ## Install
 
 Requires Paseo **0.16.1 or later** and npm on the daemon host. Plugins must already be enabled in Paseo. Each installation serves the plugin to that host's connected phone and desktop clients.
