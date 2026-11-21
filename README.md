@@ -46,7 +46,7 @@ npm ci --ignore-scripts
 paseo plugin install /absolute/path/to/paseo-files
 ```
 
-Or unpack a release archive into a permanent directory and install that directory. The manifest installs locked runtime dependencies with lifecycle scripts disabled. Install separately on each host where you want to use it. No daemon restart is required to add this plugin to an already enabled plugin runtime.
+Or unpack a release archive into a permanent directory and install that directory. The manifest installs locked runtime and compiler type dependencies with lifecycle scripts disabled. Install separately on each host where you want to use it. No daemon restart is required to add this plugin to an already enabled plugin runtime.
 
 Open **Files & Notes** in the sidebar and select a workspace. You can also open its workspace/Explorer panel or use **Find files and notes** in the Command Center. Existing text file tabs offer **Notes & Code**; PDF file tabs offer **Viewer**.
 
