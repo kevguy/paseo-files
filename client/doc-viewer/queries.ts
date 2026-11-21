@@ -1,0 +1,84 @@
+import { type BrowseFilter, queryTerms } from "../../shared/doc-viewer/browse";
+import type { DocsRecentInput, DocsRecentList } from "../../shared/doc-viewer/rpc";
+
+export const REVISION_POLL_MS = 5_000;
+export const RECENT_POLL_MS = 5_000;
+
+// Without data, a refetch resets the query to pending, which would unmount the password prompt
+// and drop what was typed, so a document that failed to open is only refetched on request.
+const opened = (query: { state: { data: unknown } }) => query.state.data !== undefined;
+
+export function documentQueryOptions(workspaceId: string, path: string, unlockAttempt = 0) {
+  return {
+    queryKey: ["doc.open", workspaceId, path, unlockAttempt] as const,
+    enabled: workspaceId !== "" && path !== "",
+    refetchInterval: (query: { state: { data: unknown } }) => (opened(query) ? REVISION_POLL_MS : false),
+    refetchOnWindowFocus: opened,
+  };
+}
+
+export function recentQueryOptions(workspaceId: string, filter: BrowseFilter & { newSince?: number | null; limit?: number }) {
+  const query = queryTerms(filter.query ?? "").join(" ");
+  const group = filter.group ?? null;
+  const needsReview = filter.needsReview ?? false;
+  const newSince = filter.newSince ?? null;
+  const newOnly = (filter.newOnly ?? false) && newSince !== null;
+  const limit = filter.limit ?? null;
+  const request: DocsRecentInput = {
+    workspaceId,
+    ...(limit !== null ? { limit } : {}),
+    ...(query ? { query } : {}),
+    ...(group ? { group } : {}),
+    ...(needsReview ? { needsReview } : {}),
+    ...(newSince !== null ? { newSince } : {}),
+    ...(newOnly ? { newOnly } : {}),
+  };
+  const queryKey = ["docs.recent", workspaceId, query, group, needsReview, newSince, newOnly, limit] as const;
+  return {
+    queryKey,
+    request,
+    refetchInterval: RECENT_POLL_MS,
+    refetchOnWindowFocus: true,
+    // A list asked for with another limit holds other documents and another notice: only its counts
+    // carry over while this one loads.
+    placeholderData: (previous: DocsRecentList | undefined, previousQuery?: { queryKey: readonly unknown[] }): DocsRecentList | undefined => {
+      if (!previous || !previousQuery || previousQuery.queryKey[queryKey.length - 1] === limit) return previous;
+      const { truncatedBy, unsupported, ...counted } = previous;
+      return { ...counted, entries: [], truncated: false };
+    },
+  };
+}
+
+export function pageQueryKey(workspaceId: string, path: string, revision: string, index: number, width: number | null) {
+  return ["doc.page", workspaceId, path, revision, index, width] as const;
+}
+
+export function blocksQueryKey(workspaceId: string, path: string, revision: string) {
+  return ["doc.blocks", workspaceId, path, revision] as const;
+}
+
+export function rowsQueryKey(
+  workspaceId: string,
+  path: string,
+  revision: string,
+  { sheet, rowOffset, columnOffset }: { sheet: number; rowOffset: number; columnOffset: number },
+  maxColumns: number,
+) {
+  return ["doc.rows", workspaceId, path, revision, sheet, rowOffset, columnOffset, maxColumns] as const;
+}
+
+export function cellQueryKey(workspaceId: string, path: string, revision: string, { sheet, row, column }: { sheet: number; row: number; column: number }) {
+  return ["doc.rows.cell", workspaceId, path, revision, sheet, row, column] as const;
+}
+
+export function animationQueryKey(workspaceId: string, path: string, revision: string) {
+  return ["media.chunk", workspaceId, path, revision] as const;
+}
+
+export function textQueryKey(workspaceId: string, path: string, revision: string, index: number) {
+  return ["doc.text", workspaceId, path, revision, index] as const;
+}
+
+export function viewerMarksQueryKey(workspaceId: string, path: string) {
+  return ["viewer-state.marks", workspaceId, path] as const;
+}

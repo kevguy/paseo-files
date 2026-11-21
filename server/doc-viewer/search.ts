@@ -1,0 +1,177 @@
+import { literalPattern, type SearchCursor, type SearchMatch, type SearchTarget } from "../../shared/doc-viewer/search";
+
+export const SEARCH_BUDGET_MS = 3_500;
+export const SEARCH_MAX_MATCHES = 50;
+const YIELD_EVERY_MS = 40;
+const STREAM_IDLE_MS = 60_000;
+const MAX_PARKED_STREAMS = 8;
+const MAX_SEARCH_SESSIONS = 256;
+
+export type SearchPosition = Pick<SearchCursor, "sheet" | "unit" | "column">;
+
+export const position = (sheet: number, unit: number, column = 0): SearchPosition => ({ sheet, unit, column });
+
+// Each find panel numbers its searches; starting a newer one abandons the older loop on the daemon.
+export class SearchGenerations {
+  private readonly latest = new Map<string, number>();
+
+  begin(session: string, generation: number): () => boolean {
+    const known = this.latest.get(session) ?? -1;
+    this.latest.delete(session);
+    this.latest.set(session, Math.max(known, generation));
+    for (const oldest of this.latest.keys()) {
+      if (this.latest.size <= MAX_SEARCH_SESSIONS) break;
+      this.latest.delete(oldest);
+    }
+    return () => (this.latest.get(session) ?? generation) <= generation;
+  }
+}
+
+export const searchGenerations = new SearchGenerations();
+
+// Visits text in document order within one call's time budget and records where the next call resumes.
+export class SearchScan {
+  readonly matches: SearchMatch[] = [];
+  next: SearchCursor | null = null;
+  scanned = 0;
+  private readonly pattern: RegExp;
+  private yielded = Date.now();
+
+  constructor(private readonly cursor: SearchCursor, private readonly deadline: number, private readonly current: () => boolean = () => true) {
+    this.pattern = literalPattern(cursor.query);
+  }
+
+  // Cached content resolves without I/O, so a long scan would otherwise hold the event loop for the whole budget.
+  async breathe(): Promise<void> {
+    if (Date.now() - this.yielded < YIELD_EVERY_MS) return;
+    await new Promise((resume) => setImmediate(resume));
+    this.yielded = Date.now();
+    this.checkCurrent();
+  }
+
+  checkCurrent(): void {
+    if (!this.current()) throw new Error("A newer search replaced this one.");
+  }
+
+  // Positions before the cursor must already be skipped by the caller.
+  visit(text: string, target: SearchTarget, at: SearchPosition, after: SearchPosition): boolean {
+    if (++this.scanned % 1024 === 0) this.checkCurrent();
+    const { pattern, cursor } = this;
+    const resumes = at.sheet === cursor.sheet && at.unit === cursor.unit && at.column === cursor.column;
+    pattern.lastIndex = resumes ? cursor.offset : 0;
+    for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+      this.matches.push({
+        target,
+        start: match.index,
+        length: match[0].length,
+        snippet: text.slice(Math.max(0, match.index - 45), match.index + match[0].length + 65),
+      });
+      if (this.matches.length === SEARCH_MAX_MATCHES) {
+        this.next = { ...cursor, ...at, offset: pattern.lastIndex };
+        return false;
+      }
+    }
+    return this.pass(after);
+  }
+
+  // The deadline also applies across units with nothing to visit, such as blank rows.
+  pass(after: SearchPosition): boolean {
+    if (Date.now() < this.deadline) return true;
+    this.next = { ...this.cursor, ...after, offset: 0 };
+    return false;
+  }
+
+  // Same resume, cap and deadline rules as visit(), for matches a caller found itself (PDFium).
+  visitMatches(found: SearchMatch[], at: SearchPosition, after: SearchPosition): boolean {
+    if (++this.scanned % 1024 === 0) this.checkCurrent();
+    const { cursor } = this;
+    const resumes = at.sheet === cursor.sheet && at.unit === cursor.unit && at.column === cursor.column;
+    for (const match of found) {
+      if (resumes && match.start < cursor.offset) continue;
+      this.matches.push(match);
+      if (this.matches.length === SEARCH_MAX_MATCHES) {
+        this.next = { ...cursor, ...at, offset: match.start + match.length };
+        return false;
+      }
+    }
+    return this.pass(after);
+  }
+}
+
+const sharedMatchCache = new WeakMap<readonly string[], { query: string; matches: ReadonlySet<number> }>();
+
+// Each shared string is matched once per query instead of once per cell that uses it.
+export function matchingSharedStrings(strings: readonly string[], query: string): ReadonlySet<number> {
+  const cached = sharedMatchCache.get(strings);
+  if (cached?.query === query) return cached.matches;
+  const pattern = literalPattern(query);
+  const matches = new Set<number>();
+  strings.forEach((text, index) => {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) matches.add(index);
+  });
+  sharedMatchCache.set(strings, { query, matches });
+  return matches;
+}
+
+// A row stream that can be parked between calls, so a long sheet is parsed once per search.
+export class RowStream<Row extends { row: number }> {
+  private head: Row | null = null;
+  constructor(private readonly source: AsyncIterator<Row>) {}
+
+  canResume(fromRow: number): boolean {
+    return this.head !== null && this.head.row <= fromRow;
+  }
+
+  async *from(fromRow: number): AsyncGenerator<Row> {
+    if (this.head && this.head.row >= fromRow) yield this.head;
+    for (;;) {
+      const next = await this.source.next();
+      if (next.done) {
+        this.head = null;
+        return;
+      }
+      this.head = next.value;
+      if (next.value.row >= fromRow) yield next.value;
+    }
+  }
+
+  get exhausted(): boolean {
+    return this.head === null;
+  }
+
+  close(): void {
+    void this.source.return?.(undefined);
+  }
+}
+
+const parked = new Map<string, { stream: RowStream<{ row: number }>; timer: ReturnType<typeof setTimeout> }>();
+
+export function takeStream<Row extends { row: number }>(key: string, fromRow: number, open: () => AsyncIterator<Row>): RowStream<Row> {
+  const entry = parked.get(key);
+  if (entry) {
+    parked.delete(key);
+    clearTimeout(entry.timer);
+    if (entry.stream.canResume(fromRow)) return entry.stream as RowStream<Row>;
+    entry.stream.close();
+  }
+  return new RowStream(open());
+}
+
+export function parkStream(key: string, stream: RowStream<{ row: number }>): void {
+  if (stream.exhausted) return stream.close();
+  parked.get(key)?.stream.close();
+  parked.delete(key);
+  const timer = setTimeout(() => {
+    if (parked.get(key)?.stream === stream) parked.delete(key);
+    stream.close();
+  }, STREAM_IDLE_MS);
+  (timer as unknown as NodeJS.Timeout).unref();
+  parked.set(key, { stream, timer });
+  for (const [oldest, value] of parked) {
+    if (parked.size <= MAX_PARKED_STREAMS) break;
+    clearTimeout(value.timer);
+    value.stream.close();
+    parked.delete(oldest);
+  }
+}
