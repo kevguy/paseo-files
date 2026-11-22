@@ -21,7 +21,9 @@ await writeFile(pidPath, `${process.pid}\n`);
 await mkdir(screenshots, { recursive: true });
 await mkdir(join(fixture, 'Projects/Atlas'), { recursive: true });
 await mkdir(join(fixture, 'Archive'), { recursive: true });
-await writeFile(markdownPath, '# Atlas Project\n\nThis folder contains synthetic workspace notes for browser validation.\n\n## Getting started\n\n- Read the overview\n- Check the **timeline**\n\n| Phase | Status |\n| --- | --- |\n| Draft | Ready |\n\n```ts\nconst sample = "synthetic";\n```\n\nSee also [[Design Notes|the design note]]. Read the [Report](report.pdf).\n\nSearch marker: browser-checkpoint\n');
+// The task items continue the bullet list after a blank line, which makes it a loose list (checkbox inside a
+// paragraph); "Next steps" is a separate tight list (checkbox as a block). Keep both shapes.
+await writeFile(markdownPath, '# Atlas Project\n\nThis folder contains synthetic workspace notes for browser validation.\n\n## Getting started\n\n- Read the overview\n- Check the **timeline**\n\n- [x] Draft the brief\n- [ ] Book the review\n\nNext steps:\n\n1. [x] Pick a venue\n2. [ ] Send invites\n\n| Phase | Status |\n| --- | --- |\n| Draft | Ready |\n\n```ts\nconst sample = "synthetic";\n```\n\nSee also [[Design Notes|the design note]]. Read the [Report](report.pdf).\n\nSearch marker: browser-checkpoint\n');
 await writeFile(join(fixture, 'Projects/Atlas/Design Notes.md'), '# Design Notes\n\nSynthetic linked note for the Atlas fixture.\n');
 await writeFile(join(fixture, 'Projects/Atlas/report.pdf'), '%PDF-1.4\nSynthetic PDF fixture for route verification.\n');
 await writeFile(join(fixture, 'Projects/Atlas/config.json'), '{"project":"atlas","items":[1,2],"enabled":true}\n');
@@ -163,6 +165,14 @@ try {
   await page.screenshot({ path: join(screenshots, 'mobile-markdown.png'), fullPage: false });
   for (const text of ['Getting started', 'Read the overview', 'Phase', 'const sample', 'the design note']) await page.getByText(text, { exact: false }).last().waitFor();
   check('markdown headings, lists, table, code and wiki link rendered', true);
+  {
+    const done = await page.getByText('Draft the brief').last().boundingBox({ timeout: 5000 }).catch(() => null);
+    const mark = await page.getByText('☑', { exact: true }).first().boundingBox({ timeout: 5000 }).catch(() => null);
+    const tight = await page.getByText('Pick a venue').last().boundingBox({ timeout: 5000 }).catch(() => null);
+    const tightMark = await page.getByText('☑', { exact: true }).last().boundingBox({ timeout: 5000 }).catch(() => null);
+    const literal = await page.getByText(/\[[ xX]\]/).filter({ visible: true }).count();
+    check('markdown task lists show a checkbox beside the text, without the literal [x]', literal === 0 && !!done && !!mark && Math.abs(done.y - mark.y) < 8 && !!tight && !!tightMark && Math.abs(tight.y - tightMark.y) < 8 && await page.getByText('☐', { exact: true }).count() > 0, JSON.stringify({ tight, tightMark, literal, texts: await page.getByText(/\[[ xX]\]/).filter({ visible: true }).allInnerTexts(), done, mark, open: await page.getByText('☐', { exact: true }).count() }));
+  }
   await page.getByRole('link', { name: 'Report', exact: true }).click();
   await page.getByText('PDF renderer stub: Projects/Atlas/report.pdf', { exact: true }).waitFor();
   check('markdown PDF link routes to the document viewer branch (renderer stubbed)', true);
