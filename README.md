@@ -1,5 +1,21 @@
 # Files & Notes for Paseo
 
+Find, read and edit your workspace's files, notes and PDFs from Paseo, on your phone or desktop.
+
+```sh
+paseo plugin add npm:@kevlai22/paseo-files
+```
+
+On the Paseo plugin directory: [paseo.sh/plugins/kevguy/files](https://paseo.sh/plugins/kevguy/files)
+
+<p>
+  <img src="docs/screenshots/files-phone.gif" width="300" alt="On a phone: searching the fictional Atlas workspace, opening design.md, adding a section in Edit, saving, and reading the result">
+</p>
+
+<sub>Recorded in Paseo's web app at a phone's screen size, with the fictional Atlas workspace.</sub>
+
+## About
+
 Find a file, read a note, make an edit, or open a PDF without leaving Paseo. Files & Notes brings workspace navigation and a Markdown-first editor to the same interface on phones and desktops.
 
 ## What you can do
