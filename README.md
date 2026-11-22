@@ -1,6 +1,6 @@
 # Files & Notes for Paseo
 
-Find, read and edit your workspace's files, notes and PDFs from Paseo, on your phone or desktop.
+Find, read and edit your workspace's files and notes, and open PDFs, from Paseo on your phone or desktop.
 
 ```sh
 paseo plugin add npm:@kevlai22/paseo-files
