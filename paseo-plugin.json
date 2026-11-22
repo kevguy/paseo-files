@@ -14,5 +14,10 @@
       "--no-audit",
       "--no-fund"
     ]
+  ],
+  "media": [
+    "docs/screenshots/desktop-split-vim-normal.png",
+    "docs/screenshots/files-phone.gif",
+    "docs/screenshots/mobile-markdown.png"
   ]
 }
