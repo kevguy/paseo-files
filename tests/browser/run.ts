@@ -40,7 +40,7 @@ await build({
       builder.onLoad({ filter: /^@getpaseo\/plugin\/client$/, namespace: 'synthetic-sdk' }, () => ({
         loader: 'js', resolveDir: root, contents: `import {useCallback} from 'react'; export function useRpc(contract){return useCallback(async input=>{const r=await fetch('/rpc/'+contract.name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});const data=await r.json();if(!r.ok)throw new Error(data.error||'RPC failed');return data;},[contract]);}`,
       }));
-      builder.onLoad({ filter: /\/ui$/, namespace: 'synthetic-sdk' }, () => ({ loader: 'js', resolveDir: root, contents: `export async function copyText(){}` }));
+      builder.onLoad({ filter: /\/ui$/, namespace: 'synthetic-sdk' }, () => ({ loader: 'js', resolveDir: root, contents: `export async function copyText(){} export function DocumentFrame(){return null;}` }));
       builder.onLoad({ filter: /\/react-native$/, namespace: 'synthetic-sdk' }, () => ({ loader: 'js', resolveDir: root, contents: `export function useSafeAreaInsets(){return {bottom:0};}` }));
       builder.onResolve({ filter: /use-bottom-inset$/ }, args => ({ path: `bottom-inset-stub:${args.path}`, namespace: 'synthetic-sdk' }));
       builder.onLoad({ filter: /^bottom-inset-stub:/, namespace: 'synthetic-sdk' }, () => ({ loader: 'js', resolveDir: root, contents: `import {useRef} from 'react'; export function useBottomInset(){return {bottomInset:0,ref:useRef(null),onLayout(){}};}` }));

@@ -12,7 +12,7 @@ import 'prismjs/components/prism-bash';
 import {mono} from './ui';
 marked.use({gfm:true,extensions:[{name:'wikilink',level:'inline',start:(src:string)=>src.indexOf('[['),tokenizer(src:string){const match=/^\[\[([^\]\n]+)\]\]/.exec(src);if(!match)return; const [href,label]=match[1].split('|');return {type:'wikilink',raw:match[0],href,text:label??href};}}]});
 export function Code({text,language,theme}: {text:string;language:string;theme:PluginTheme}){
-  const parts=useMemo(()=>{const aliases:Record<string,string>={js:'javascript',ts:'typescript',py:'python',yml:'yaml',sh:'bash',html:'markup'};const grammar=Prism.languages[aliases[language]??language];return grammar&&text.length<40000?Prism.tokenize(text,grammar):[text];},[text,language]);
+  const parts=useMemo(()=>{const aliases:Record<string,string>={js:'javascript',ts:'typescript',py:'python',yml:'yaml',sh:'bash',html:'markup',htm:'markup'};const grammar=Prism.languages[aliases[language]??language];return grammar&&text.length<40000?Prism.tokenize(text,grammar):[text];},[text,language]);
   function render(part:string|Prism.Token,i:number):ReactNode{if(typeof part==='string')return part;const color=['comment','prolog'].includes(part.type)?theme.colors.foregroundMuted:['string','attr-value','number','boolean'].includes(part.type)?theme.colors.statusSuccess:theme.colors.accent;return <Text key={i} style={{color}}>{Array.isArray(part.content)?part.content.map(render):typeof part.content==='string'?part.content:render(part.content,0)}</Text>;}
   return <Text selectable style={{fontFamily:mono,fontSize:14,lineHeight:22,color:theme.colors.foreground}}>{parts.map(render)}</Text>;
 }
