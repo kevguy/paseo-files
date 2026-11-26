@@ -2,7 +2,7 @@
 
 Read Markdown, edit notes and source files, search a workspace, and open PDFs inside Paseo. Native mobile clients use their platform text input for editing. The CodeMirror editor and full Vim mode run on the web editor, including desktop and tablet browsers; the native mobile app does not provide full Vim mode.
 
-Start in **Files & Notes** in the sidebar and choose a workspace. Search filenames/folders or file contents. Open a note to switch between Read and Edit; Save writes changes explicitly and rejects a stale file revision. Open a PDF to use the integrated native-compatible document viewer.
+Start in **Files & Notes** in the sidebar and choose a workspace. Search filenames/folders or file contents. Open a note to switch between Read and Edit; HTML files open in a sandboxed rendered Preview (in the native apps, when opened as a file tab); Save writes changes explicitly and rejects a stale file revision. Open a PDF to use the integrated native-compatible document viewer.
 
 Text edits are limited to regular UTF-8 files up to 512 KiB in the selected workspace. Search is bounded and marks incomplete results. Drafts and viewed contents can be retained by the connected client. No agent turn hooks, automatic messages or global content index are installed.
 

@@ -24,6 +24,7 @@ Find a file, read a note, make an edit, or open a PDF without leaving Paseo. Fil
 - **Write from your phone.** Switch to Edit for a formatting toolbar, selection wrapping, undo/redo, Find and explicit Save. Desktop layouts also offer a split reading/editing view.
 - **Use Vim on desktop/web.** CodeMirror provides a Vim toggle, modal editing and `:w` saving. The toggle is also available in tablet browsers with a keyboard; native Android/iPad apps use native editing without Vim. Desktop Paseo uses the web editor too.
 - **Edit source files.** Open UTF-8 code, JSON, YAML, configuration and plain-text files. Syntax view highlights common languages; JSON has a format action. Edits stay local to the selected host.
+- **Preview HTML pages.** `.html` and `.htm` files open in a rendered Preview, with Source for the highlighted markup and Split for editing beside the preview. On desktop and web the preview follows your draft as you type; in the native apps it shows the saved file in a **Notes & Code** file tab, while files opened from the Files & Notes browser keep the Syntax view there.
 - **Read PDFs.** Open a PDF straight from search, browse pages, zoom, search extracted text and copy text. Rendering happens on the host, so the native phone client receives page images rather than relying on an Android browser PDF viewer.
 - **Get to files quickly.** Search file and folder names, search literal text inside files, browse directories, or enter a workspace-relative folder path. Search uses ripgrep when available and a bounded fallback otherwise.
 
@@ -39,6 +40,14 @@ Screenshots use an entirely fictional Atlas workspace. These are the real compon
 </p>
 
 ![Split Markdown editing with Vim enabled](docs/screenshots/desktop-split-vim-normal.png)
+
+The HTML Preview shots below come from the Paseo 0.16.2 web app, showing a fictional allotment planner. Its chart is drawn by the page's own inline script.
+
+<p>
+  <img src="docs/screenshots/html-preview-phone.png" width="300" alt="A fictional allotment planner page rendered in HTML Preview on a phone-sized screen, with a bar chart drawn by the page's script">
+</p>
+
+![Split HTML editing: an unsaved change to the page title already shows in the preview](docs/screenshots/html-preview-split.png)
 
 ## Install from npm
 
@@ -104,6 +113,7 @@ Writes use an atomic replacement in the same directory, preserve ordinary permis
 - Search is literal and case-insensitive in the interface. Content results show the first matching line per file. Results, scan time and output are bounded; a limited result set is labelled so it is not mistaken for a complete search. Dependency/build directories are skipped. Search does not keep a background content index.
 - Native source editing uses the platform text input with editing tools; highlighting is in Syntax/Read mode. Desktop and browser editing uses CodeMirror with inline highlighting and optional Vim bindings. LSP completions, an Obsidian plugin ecosystem and a knowledge graph are outside this release.
 - Internal links can open files in the workspace. Wiki links that need disambiguation open a filename search. Heading-only links provide a Find hint. Images in Markdown are links to the integrated viewer; remote content and HTML scripts are never loaded by the Markdown reader.
+- On desktop and web, HTML Preview uses the same isolation as Paseo's own HTML preview: the page runs in a sandboxed frame (`allow-scripts` only: no access to Paseo, its cookies or storage, no popups, no top-level navigation) with a content security policy that allows inline styles and scripts and refuses the page's own requests: fetch and XHR, WebSockets, remote scripts, styles, images and fonts, form posts and nested frames. The page can still navigate its own frame, and a content security policy does not cover WebRTC, so a page's script could still send data out that way; Paseo's own preview has the same limits. The native apps use Paseo's document frame, which shows the saved file with JavaScript turned off and follows no links; it applies no content security policy, so remote images or stylesheets the page refers to can still load there.
 - PDF search needs a text layer; scanned images do not gain OCR. Host rendering consumes host resources while a document is open. Password-protected PDF handling is inherited from the document viewer.
 - Document positions and marks are stored under `~/.local/state/paseo-files/doc-viewer` (or `XDG_STATE_HOME/paseo-files/doc-viewer`). `PASEO_FILES_DOC_VIEWER_STATE_DIR` can select an absolute directory. This is separate from a standalone PDF/Office viewer installation. File contents and review drafts may also be cached on the client.
 - The integrated viewer includes Office and image readers from upstream. PDF is the primary validation target here; support for other formats follows that project's documented limits.
