@@ -23,7 +23,7 @@ const stubs: Record<string, string> = {
     export const copyText = async () => {};
     const toast = { show() {}, error() {} };
     export const useToast = () => toast;`,
-  '@getpaseo/plugin/client/ui': 'export const copyText = async () => {};',
+  '@getpaseo/plugin/client/ui': 'export const copyText = async () => {}; export const DocumentFrame = "DocumentFrame";',
   // RPC hooks call the host of the nearest HostRpc, as Paseo binds them to the mounted screen's host.
   '@getpaseo/plugin/client': `import { createContext, createElement, useContext, useMemo } from "react";
     const Host = createContext(null);
