@@ -9,7 +9,7 @@ import { REVIEW_MAX_NOTE_CHARS } from "../../shared/doc-viewer/limits";
 import { docOpenRpc, viewerStateReadRpc } from "../../shared/doc-viewer/rpc";
 import { baseName, humanSize } from "./format";
 import { documentQueryOptions, viewerMarksQueryKey } from "./queries";
-import { noteLocation, pageImageKey, reviewDrafts, reviewScope, reviewUnit, type ReviewNote, useReviewDraft } from "./review-draft";
+import { editingNotes, noteLocation, pageImageKey, reviewDrafts, reviewScope, reviewUnit, type ReviewNote, useEditingNote, useReviewDraft } from "./review-draft";
 import { formatReview, noteRevisionStatus, type PinLabel } from "./review-message";
 import { canAttachPage, useAttachPage } from "./review-note";
 import { recipientStatusLabel, type ReviewRecipient, reviewRecipients, selectedRecipientId, sendReview } from "./review-send";
@@ -32,7 +32,9 @@ export function ReviewScreen({ host, theme, layout, params, navigation }: Plugin
   const openDocument = useRpc(docOpenRpc);
   const readMarks = useRpc(viewerStateReadRpc);
   const attachPage = useAttachPage(workspaceId);
-  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  // Kept outside the screen, so a host switch or closing the screen does not lose it.
+  const editing = useEditingNote(scope, draft);
+  const setEditing = (edit: { id: string; text: string } | null) => editingNotes.set(scope, edit);
   const [recipientId, setRecipientId] = useState<string | null>(null);
   const [preselectedId, setPreselectedId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
