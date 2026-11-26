@@ -157,3 +157,58 @@ export const reviewDrafts = sharedReviewDrafts(globalThis);
 export function useReviewDraft(scope: string): ReviewDraft {
   return useSyncExternalStore(reviewDrafts.subscribe, () => reviewDrafts.get(scope), () => reviewDrafts.get(scope));
 }
+
+// New text for a note being edited on the review screen, one per scope, kept so a host switch or
+// closing the screen does not lose it. It has its own global so it works beside a drafts store
+// created by an older bundle in this app session. The global holds plain data only and the logic
+// stays in this module, so another version of this bundle can share it; a store of any other
+// shape is replaced.
+export interface EditingNote {
+  readonly id: string;
+  readonly text: string;
+}
+
+interface EditingStore {
+  readonly edits: Map<string, EditingNote>;
+  readonly listeners: Set<() => void>;
+}
+
+const MAX_EDITING = 50;
+const EDITING_KEY = Symbol.for("paseo-doc-viewer/review-editing/v1");
+
+function editingStore(): EditingStore {
+  const holder = globalThis as { [EDITING_KEY]?: Partial<EditingStore> };
+  const store = holder[EDITING_KEY];
+  if (store && typeof store === "object" && store.edits instanceof Map && store.listeners instanceof Set) return store as EditingStore;
+  const fresh: EditingStore = { edits: new Map(), listeners: new Set() };
+  holder[EDITING_KEY] = fresh;
+  return fresh;
+}
+
+export const editingNotes = {
+  get(scope: string): EditingNote | undefined {
+    const edit: unknown = editingStore().edits.get(scope);
+    if (!edit || typeof edit !== "object") return undefined;
+    const { id, text } = edit as Record<string, unknown>;
+    return typeof id === "string" && typeof text === "string" ? (edit as EditingNote) : undefined;
+  },
+  set(scope: string, edit: EditingNote | null) {
+    const { edits, listeners } = editingStore();
+    edits.delete(scope);
+    if (edit) edits.set(scope, { id: edit.id, text: edit.text.slice(0, REVIEW_MAX_NOTE_CHARS) });
+    if (edits.size > MAX_EDITING) edits.delete(edits.keys().next().value!);
+    for (const listener of listeners) listener();
+  },
+  subscribe(listener: () => void) {
+    const { listeners } = editingStore();
+    listeners.add(listener);
+    return () => void listeners.delete(listener);
+  },
+};
+
+/** The edit kept for this scope, while its note is still in the draft. */
+export function useEditingNote(scope: string, draft: ReviewDraft): EditingNote | null {
+  const get = () => editingNotes.get(scope) ?? null;
+  const edit = useSyncExternalStore(editingNotes.subscribe, get, get);
+  return edit && draft.notes.some((note) => note.id === edit.id) ? edit : null;
+}
